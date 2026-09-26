@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Assignments | Classroom</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #17211b;
+            --muted: #66736a;
+            --paper: #f4f1e8;
+            --panel: #fffdf7;
+            --line: #d9ded5;
+            --green: #1f6f4a;
+            --green-dark: #164d35;
+            --yellow: #e9b949;
+            --shadow: 0 18px 45px rgba(28, 45, 34, .09);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-width: 320px;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 8% 0%, rgba(233, 185, 73, .20), transparent 28rem),
+                linear-gradient(135deg, #f6f2e8 0%, #edf2e9 100%);
+            font-family: Georgia, "Times New Roman", serif;
+        }
+        a { color: inherit; }
+        .shell { max-width: 1120px; margin: 0 auto; padding: 28px 24px 64px; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+        .brand { font-size: 1.05rem; font-weight: 700; letter-spacing: .02em; }
+        .account { display: flex; align-items: center; gap: 14px; color: var(--muted); font: 500 .88rem/1.2 "Segoe UI", sans-serif; }
+        .account a { text-decoration: none; color: var(--green-dark); border-bottom: 1px solid currentColor; }
+        .hero { padding: 76px 0 48px; max-width: 740px; }
+        .eyebrow { margin: 0 0 14px; color: var(--green); font: 700 .75rem/1 "Segoe UI", sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+        h1 { margin: 0; font-size: clamp(2.7rem, 7vw, 5.8rem); line-height: .94; font-weight: 700; letter-spacing: -.04em; }
+        .intro { max-width: 590px; margin: 24px 0 0; color: var(--muted); font-size: 1.15rem; line-height: 1.55; }
+        .section-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+        h2 { margin: 0; font-size: 1.55rem; }
+        .count { color: var(--muted); font: 600 .82rem "Segoe UI", sans-serif; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+        .assignment { padding: 24px; background: rgba(255, 253, 247, .88); border: 1px solid var(--line); box-shadow: var(--shadow); }
+        .assignment h3 { margin: 0 0 10px; font-size: 1.35rem; }
+        .course { margin: 0 0 20px; color: var(--muted); font: 600 .8rem "Segoe UI", sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 22px; }
+        .meta dt { margin-bottom: 4px; color: var(--muted); font: 600 .7rem "Segoe UI", sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+        .meta dd { margin: 0; font: 600 .95rem "Segoe UI", sans-serif; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+        .action { display: inline-block; padding: 10px 13px; color: var(--panel); background: var(--green); border: 0; font: 700 .78rem "Segoe UI", sans-serif; text-decoration: none; cursor: pointer; }
+        .action.secondary { color: var(--green-dark); background: transparent; border: 1px solid var(--green); }
+        .empty { padding: 34px; background: rgba(255, 253, 247, .72); border: 1px dashed var(--line); }
+        .empty p { margin: 0; color: var(--muted); line-height: 1.55; }
+        .notice { margin: 0 0 26px; padding: 13px 16px; background: rgba(233, 185, 73, .18); border-left: 3px solid var(--yellow); font: 600 .88rem/1.4 "Segoe UI", sans-serif; }
+        .publish-form { display: inline; }
+        @media (max-width: 620px) {
+            .shell { padding: 20px 16px 48px; }
+            .topbar { align-items: flex-start; }
+            .account { flex-direction: column; align-items: flex-end; gap: 6px; }
+            .hero { padding: 58px 0 38px; }
+            h1 { font-size: 3.2rem; }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <div class="brand">Classroom / control room</div>
+            <div class="account">
+                <span>GitHub @{{ github_identity.github_username }}</span>
+                <a href="/auth/logout/">Log out</a>
+            </div>
+        </header>
+
+        <section class="hero">
+            <p class="eyebrow">Assignment operations</p>
+            <h1>Keep the class moving.</h1>
+            <p class="intro">A quiet home for repository provisioning, workflow results, and the reports that turn student work into something you can act on.</p>
+        </section>
+
+        <section aria-labelledby="assignments-heading">
+            {% for message in messages %}
+                <div class="notice">{{ message }}</div>
+            {% endfor %}
+            <div class="section-head">
+                <h2 id="assignments-heading">Assignments</h2>
+                <div class="actions">
+                    <a class="action" href="/assignments/import/">Import assignment</a>
+                    <span class="count">{{ assignments|length }} total</span>
+                </div>
+            </div>
+
+            {% if assignments %}
+                <div class="grid">
+                    {% for assignment in assignments %}
+                        <article class="assignment">
+                            <p class="course">{{ assignment.course.name }} / {{ assignment.course.github_organization }}</p>
+                            <h3>{{ assignment.name }}</h3>
+                            <dl class="meta">
+                                <div>
+                                    <dt>Due</dt>
+                                    <dd>{{ assignment.due_at|date:"M j, Y · g:i A" }}</dd>
+                                </div>
+                                <div>
+                                    <dt>Repositories</dt>
+                                    <dd>{{ assignment.created_repository_count }} linked{% if assignment.repository_count != assignment.created_repository_count %} / {{ assignment.repository_count }} total{% endif %}</dd>
+                                </div>
+                                <div>
+                                    <dt>Status</dt>
+                                    <dd>{{ assignment.get_status_display }}</dd>
+                                </div>
+                                <div>
+                                    <dt>Template</dt>
+                                    <dd>{{ assignment.template_repository }}</dd>
+                                </div>
+                            </dl>
+                            <div class="actions">
+                                {% if assignment.status == "draft" %}
+                                    <form class="publish-form" method="post" action="/assignments/{{ assignment.id }}/publish/">
+                                        {% csrf_token %}
+                                        <button class="action" type="submit">Publish assignment</button>
+                                    </form>
+                                {% else %}
+                                    <form class="publish-form" method="post" action="/assignments/{{ assignment.id }}/retry-repositories/">
+                                        {% csrf_token %}
+                                        <button class="action secondary" type="submit">Retry repositories</button>
+                                    </form>
+                                {% endif %}
+                                <a class="action" href="/assignments/{{ assignment.id }}/report/">View report</a>
+                                <a class="action secondary" href="/api/assignments/{{ assignment.id }}/repositories/">Repositories</a>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty">
+                    <p>No assignments yet. The API and Django admin are ready for the first course and assignment; the creation form is the next dashboard slice.</p>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

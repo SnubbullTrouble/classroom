@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ assignment.name }} Report | Classroom</title>
+    {% load assignment_tags %}
+    <style>
+        :root { --ink: #17211b; --muted: #66736a; --paper: #f4f1e8; --panel: #fffdf7; --line: #d9ded5; --green: #1f6f4a; --red: #9c3d2e; }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: var(--ink); background: linear-gradient(135deg, #f6f2e8, #edf2e9); font-family: "Segoe UI", sans-serif; }
+        .shell { max-width: 1180px; margin: 0 auto; padding: 30px 24px 64px; }
+        .back { color: var(--green); font-weight: 700; text-decoration: none; }
+        header { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin: 52px 0 28px; }
+        h1 { margin: 0; font: 700 clamp(2.2rem, 6vw, 4.8rem)/.95 Georgia, "Times New Roman", serif; letter-spacing: -.04em; }
+        .generated { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; color: var(--muted); font-size: .82rem; }
+        .refresh-form { display: inline; }
+        .refresh-button { padding: 8px 11px; color: var(--green); background: rgba(255, 253, 247, .7); border: 1px solid #9ab8a5; font: 700 .76rem "Segoe UI", sans-serif; cursor: pointer; transition: background .15s ease, border-color .15s ease, transform .15s ease; }
+        .refresh-button:hover { background: #e8f0e8; border-color: var(--green); }
+        .refresh-button:focus-visible { outline: 3px solid rgba(233, 185, 73, .55); outline-offset: 2px; }
+        .refresh-button:active { transform: translateY(1px); }
+        .summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+        .stat { min-width: 130px; padding: 16px; background: rgba(255, 253, 247, .84); border: 1px solid var(--line); }
+        .stat strong { display: block; font-size: 1.5rem; }
+        .stat span { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+        .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 14px; }
+        .control label { display: block; margin-bottom: 5px; color: var(--muted); font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .control select { min-width: 170px; padding: 9px 10px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); font: .88rem "Segoe UI", sans-serif; }
+        .result-count { margin-left: auto; padding-bottom: 9px; color: var(--muted); font-size: .82rem; }
+        .table-wrap { overflow-x: auto; background: rgba(255, 253, 247, .88); border: 1px solid var(--line); }
+        table { width: 100%; min-width: 680px; border-collapse: collapse; }
+        th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+        th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+        tr:last-child td { border-bottom: 0; }
+        .student { font-weight: 700; }
+        .repo, .time { color: var(--muted); font-size: .8rem; }
+        .scores { display: flex; flex-wrap: wrap; gap: 6px; }
+        .score { padding: 4px 7px; border: 1px solid transparent; font-size: .8rem; }
+        .score-good { color: #175b3b; background: #dcefe2; border-color: #a8d1b6; }
+        .score-partial { color: #765514; background: #fff0c7; border-color: #e5c879; }
+        .score-zero, .score-none { color: #8a3328; background: #f8dfdb; border-color: #e4aaa2; }
+        .submission { font-weight: 700; }
+        .submission-on-time { color: #175b3b; }
+        .submission-late { color: #9a6315; }
+        .submission-missing { color: var(--red); }
+        .missing { color: var(--red); font-weight: 700; }
+        .empty { color: var(--muted); }
+        @media (max-width: 620px) { .shell { padding: 22px 14px 48px; } header { display: block; margin-top: 42px; } .generated { margin-top: 12px; } }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <a class="back" href="/assignments/">← Back to assignments</a>
+        <header>
+            <h1>{{ assignment.name }}</h1>
+            <div class="generated">
+                Generated {{ report.generated_at|date:"M j, Y · g:i A" }}
+                <form class="refresh-form" method="post" action="/assignments/{{ assignment.id }}/report/">
+                    {% csrf_token %}
+                    <button class="refresh-button" type="submit">Refresh report</button>
+                </form>
+            </div>
+        </header>
+        <section class="summary" aria-label="Report summary">
+            <div class="stat"><strong>{{ report.data.summary.students }}</strong><span>Students</span></div>
+            <div class="stat"><strong>{{ report.data.summary.submitted }}</strong><span>Submitted</span></div>
+            <div class="stat"><strong>{{ report.data.summary.missing }}</strong><span>Missing runs</span></div>
+            <div class="stat"><strong>{{ report.data.summary.errors|default:"0" }}</strong><span>Errors</span></div>
+        </section>
+        <section class="controls" aria-label="Report filters">
+            <div class="control">
+                <label for="filter">Show</label>
+                <select id="filter">
+                    <option value="all">Everyone</option>
+                    <option value="attention">Needs attention</option>
+                    <option value="late">Late submissions</option>
+                    <option value="below-100">Below 100%</option>
+                    <option value="missing">Missing workflow runs</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="sort">Sort by</label>
+                <select id="sort">
+                    <option value="student">Student name</option>
+                    <option value="score-desc">Score, highest first</option>
+                    <option value="score-asc">Score, lowest first</option>
+                    <option value="date-desc">Submitted, newest first</option>
+                    <option value="date-asc">Submitted, oldest first</option>
+                </select>
+            </div>
+            <span class="result-count" id="result-count" aria-live="polite"></span>
+        </section>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Student</th><th>Submission</th><th>Scores</th><th>Total</th></tr></thead>
+                <tbody>
+                {% for row in report.data.rows %}
+                    <tr data-row data-student="{{ row.student|lower }}" data-late="{% if row.late_penalty < 0 %}true{% else %}false{% endif %}" data-missing="{% if row.status == "no_runs" %}true{% else %}false{% endif %}" data-score="{% if row.total %}{{ row.total.adjusted_percentage }}{% else %}0{% endif %}" data-date="{{ row.submitted_at|default:"" }}">
+                        <td><div class="student">{{ row.student }}</div><div class="repo">{{ row.repository }}</div></td>
+                        <td>
+                            {% if row.status == "no_runs" %}<span class="missing">No workflow runs</span>
+                            {% else %}<div class="submission {{ row|submission_tone }}">{{ row.status }}{% if row.late_penalty < 0 %} · late{% endif %}</div><div class="time {{ row|submission_tone }}">{{ row.submitted_at|local_time }}</div>{% endif %}
+                        </td>
+                        <td>
+                            {% if row.scores %}<div class="scores">{% for name, score in row.scores.items %}<span class="score {{ score|score_tone }}">{{ name }}: {{ score }}</span>{% endfor %}</div>
+                            {% else %}<span class="empty">No scores found</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if row.total %}<span class="score {{ row.total|total_tone }}">{{ row.total.adjusted_earned|floatformat:"-2" }}/{{ row.total.maximum|floatformat:"-2" }} ({{ row.total.adjusted_percentage|floatformat:"0" }}%)</span>{% else %}<span class="empty">-</span>{% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="empty">No student repositories are linked to this assignment.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <script>
+        const filterSelect = document.querySelector("#filter");
+        const sortSelect = document.querySelector("#sort");
+        const tableBody = document.querySelector("tbody");
+        const countLabel = document.querySelector("#result-count");
+
+        function visibleForFilter(row, filter) {
+            const late = row.dataset.late === "true";
+            const missing = row.dataset.missing === "true";
+            const score = Number(row.dataset.score || 0);
+            if (filter === "late") return late;
+            if (filter === "below-100") return !missing && score < 100;
+            if (filter === "missing") return missing;
+            if (filter === "attention") return late || missing || score < 100;
+            return true;
+        }
+
+        function sortRows(rows, sort) {
+            return rows.sort((left, right) => {
+                if (sort === "student") return left.dataset.student.localeCompare(right.dataset.student);
+                if (sort === "score-desc" || sort === "score-asc") {
+                    const difference = Number(left.dataset.score) - Number(right.dataset.score);
+                    return sort === "score-desc" ? -difference : difference;
+                }
+                const leftDate = Date.parse(left.dataset.date) || 0;
+                const rightDate = Date.parse(right.dataset.date) || 0;
+                return sort === "date-desc" ? rightDate - leftDate : leftDate - rightDate;
+            });
+        }
+
+        function updateRows() {
+            const rows = [...tableBody.querySelectorAll("tr[data-row]")];
+            const filtered = rows.filter(row => visibleForFilter(row, filterSelect.value));
+            sortRows(rows, sortSelect.value).forEach(row => tableBody.appendChild(row));
+            rows.forEach(row => { row.hidden = !filtered.includes(row); });
+            countLabel.textContent = `${filtered.length} of ${rows.length} students`;
+        }
+
+        filterSelect.addEventListener("change", updateRows);
+        sortSelect.addEventListener("change", updateRows);
+        updateRows();
+    </script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.conf import settings
+from django.core.cache import cache
+from django.db import transaction
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from datetime import timedelta
+from django.views.decorators.http import require_POST
+import requests
+
+from github_integration import GitHubClient, GitHubError
+
+from .models import Assignment, ReportJob
+from .forms import AssignmentImportForm
+from .publish import publish_assignment, retry_assignment_repositories
+from reports.tasks import generate_report_job
+
+IMPORT_OPTIONS_CACHE_SECONDS = 300
+
+
+def _discover_import_options(identity, force_refresh=False):
+    if identity is None or identity.revoked_at is not None:
+        return [], [], ""
+
+    cache_key = (
+        f"github-import-options:{identity.user_id}:{identity.updated_at.isoformat()}"
+    )
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return (*cached, "")
+
+    try:
+        github = GitHubClient(identity.encrypted_token)
+        organizations = github.get_organizations()
+
+        templates = []
+        cache.set(
+            cache_key,
+            (organizations, templates),
+            IMPORT_OPTIONS_CACHE_SECONDS,
+        )
+        return organizations, templates, ""
+    except (GitHubError, requests.RequestException) as exc:
+        return [], [], str(exc)
+
+
+def _get_or_queue_report_job(request, assignment):
+    job = assignment.report_jobs.filter(
+        requested_by=request.user,
+        status__in=["queued", "running"],
+    ).first()
+    if job is not None:
+        return job
+
+    recent_job = assignment.report_jobs.filter(
+        requested_by=request.user,
+        status__in=["completed", "failed"],
+        created_at__gte=timezone.now()
+        - timedelta(seconds=settings.REPORT_REFRESH_COOLDOWN_SECONDS),
+    ).first()
+    if recent_job is not None:
+        return recent_job
+
+    job = ReportJob.objects.create(
+        assignment=assignment,
+        requested_by=request.user,
+        total_items=assignment.student_repositories.count(),
+    )
+    try:
+        generate_report_job.delay(job.id)
+    except Exception as exc:
+        job.status = "failed"
+        job.error_message = str(exc)
+        job.save(update_fields=["status", "error_message"])
+    return job
+
+
+@login_required(login_url="/auth/github/login/")
+def assignment_dashboard(request):
+    assignments = (
+        Assignment.objects.filter(course__owner=request.user)
+        .select_related("course")
+        .annotate(
+            repository_count=Count("student_repositories", distinct=True),
+            created_repository_count=Count(
+                "student_repositories",
+                filter=Q(student_repositories__status="created"),
+                distinct=True,
+            ),
+        )
+        .prefetch_related("student_repositories")
+    )
+    return render(
+        request,
+        "assignments/dashboard.html",
+        {
+            "assignments": assignments,
+            "github_identity": getattr(request.user, "github_identity", None),
+        },
+    )
+
+
+@login_required(login_url="/auth/github/login/")
+def import_assignment(request):
+    identity = getattr(request.user, "github_identity", None)
+    organizations, templates, discovery_error = _discover_import_options(
+        identity,
+        force_refresh=request.GET.get("refresh") == "1",
+    )
+
+    form = AssignmentImportForm(
+        request.POST or None,
+        organizations=organizations,
+        templates=templates,
+    )
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            course, _ = request.user.courses.get_or_create(
+                name=form.cleaned_data["course_name"],
+                defaults={
+                    "github_organization": form.cleaned_data["github_organization"],
+                },
+            )
+            assignment = Assignment.objects.create(
+                course=course,
+                created_by=request.user,
+                name=form.cleaned_data["assignment_name"],
+                template_repository=form.cleaned_data["template_repository"],
+                due_at=form.cleaned_data["due_at"],
+                late_penalty=form.cleaned_data["late_penalty"],
+            )
+        messages.success(request, f"Draft created for {assignment.name}.")
+        return redirect("assignment-dashboard")
+
+    return render(
+        request,
+        "assignments/import.html",
+        {
+            "form": form,
+            "discovery_error": discovery_error,
+            "organization_count": len(organizations),
+            "template_count": len(templates),
+        },
+    )
+
+
+@login_required(login_url="/auth/github/login/")
+def assignment_report_page(request, assignment_id):
+    assignment = get_object_or_404(
+        Assignment,
+        pk=assignment_id,
+        course__owner=request.user,
+    )
+
+    if assignment.status != "active":
+        messages.error(
+            request,
+            "Publish the assignment before generating a report.",
+        )
+        return redirect("assignment-dashboard")
+
+    report = assignment.reports.first()
+
+    if report is not None:
+        data = report.data or {}
+        summary = data.setdefault("summary", {})
+
+        summary.setdefault("students", 0)
+        summary.setdefault("submitted", 0)
+        summary.setdefault("missing", 0)
+        summary.setdefault("errors", 0)
+
+        report.data = data
+
+    if report is None or request.method == "POST":
+        identity = getattr(request.user, "github_identity", None)
+
+        if identity is None or identity.revoked_at is not None:
+            messages.error(
+                request,
+                "Sign in with GitHub before generating a report.",
+            )
+            return redirect("assignment-dashboard")
+
+        job = _get_or_queue_report_job(request, assignment)
+
+        if job.status in ["completed", "failed"] and report is not None:
+            messages.info(
+                request,
+                "A report was refreshed recently. Please wait before refreshing again.",
+            )
+            return render(
+                request,
+                "assignments/report.html",
+                {
+                    "assignment": assignment,
+                    "report": report,
+                },
+            )
+
+        return render(
+            request,
+            "assignments/report_waiting.html",
+            {
+                "assignment": assignment,
+                "job": job,
+            },
+        )
+
+    return render(
+        request,
+        "assignments/report.html",
+        {
+            "assignment": assignment,
+            "report": report,
+        },
+    )
+
+
+@login_required(login_url="/auth/github/login/")
+@require_POST
+def retry_assignment_repositories_view(request, assignment_id):
+    assignment = get_object_or_404(
+        Assignment,
+        pk=assignment_id,
+        course__owner=request.user,
+        status="active",
+    )
+    identity = getattr(request.user, "github_identity", None)
+    if identity is None or identity.revoked_at is not None:
+        messages.error(request, "Sign in with GitHub before retrying repositories.")
+        return redirect("assignment-dashboard")
+
+    try:
+        summary = retry_assignment_repositories(
+            assignment,
+            GitHubClient(identity.encrypted_token),
+        )
+    except GitHubError as exc:
+        messages.error(request, str(exc))
+        return redirect("assignment-dashboard")
+
+    identity.last_used_at = timezone.now()
+    identity.save(update_fields=["last_used_at", "updated_at"])
+    messages.success(
+        request,
+        f"Repository retry finished: {len(summary['created'])} processed, "
+        f"{len(summary['failed'])} failed.",
+    )
+    return redirect("assignment-dashboard")
+
+
+@login_required(login_url="/auth/github/login/")
+@require_POST
+def publish_assignment_view(request, assignment_id):
+    assignment = get_object_or_404(
+        Assignment,
+        pk=assignment_id,
+        course__owner=request.user,
+        status="draft",
+    )
+    identity = getattr(request.user, "github_identity", None)
+    if identity is None or identity.revoked_at is not None:
+        messages.error(request, "Sign in with GitHub before publishing an assignment.")
+        return redirect("assignment-dashboard")
+
+    try:
+        summary = publish_assignment(
+            assignment,
+            GitHubClient(identity.encrypted_token),
+            identity.github_username,
+        )
+    except GitHubError as exc:
+        messages.error(request, str(exc))
+        return redirect("assignment-dashboard")
+
+    identity.last_used_at = timezone.now()
+    identity.save(update_fields=["last_used_at", "updated_at"])
+    messages.success(
+        request,
+        f"Published {assignment.name}: {len(summary['created'])} repositories created or linked.",
+    )
+    return redirect("assignment-dashboard")

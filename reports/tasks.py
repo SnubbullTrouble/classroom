@@ -1,0 +1,109 @@
+from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+from django.utils import timezone
+import requests
+
+from accounts.models import GitHubIdentity
+from assignments.models import ReportJob
+from github_integration import GitHubClient, GitHubError
+
+from .services import generate_report
+
+
+@shared_task(
+    bind=True,
+    ignore_result=True,
+    autoretry_for=(ConnectionError,),
+    retry_backoff=True,
+    max_retries=3,
+)
+def generate_report_job(self, job_id):
+    job = ReportJob.objects.select_related(
+        "assignment",
+        "requested_by",
+    ).get(id=job_id)
+
+    def mark_failed(message):
+        ReportJob.objects.filter(id=job.id).update(
+            status="failed",
+            error_message=str(message),
+            completed_at=timezone.now(),
+        )
+
+    try:
+        job.status = "running"
+        job.started_at = timezone.now()
+        job.error_message = ""
+        job.save(
+            update_fields=[
+                "status",
+                "started_at",
+                "error_message",
+            ]
+        )
+
+        job.total_items = job.assignment.student_repositories.count()
+        job.save(update_fields=["total_items"])
+
+        identity = GitHubIdentity.objects.filter(
+            user=job.requested_by,
+            revoked_at__isnull=True,
+        ).first()
+
+        if identity is None:
+            mark_failed("No active GitHub identity is available.")
+            return
+
+        def update_progress(completed, total):
+            ReportJob.objects.filter(id=job.id).update(
+                completed_items=completed,
+                total_items=total,
+            )
+
+        report = generate_report(
+            job.assignment,
+            job.requested_by,
+            GitHubClient(identity.encrypted_token),
+            progress_callback=update_progress,
+        )
+
+        job.status = "completed"
+        job.report = report
+        job.completed_items = job.total_items
+        job.completed_at = timezone.now()
+        job.save(
+            update_fields=[
+                "status",
+                "report",
+                "completed_items",
+                "completed_at",
+            ]
+        )
+
+        identity.last_used_at = timezone.now()
+        identity.save(update_fields=["last_used_at", "updated_at"])
+
+    except (
+        GitHubError,
+        requests.RequestException,
+        SoftTimeLimitExceeded,
+        TimeLimitExceeded,
+    ) as exc:
+        mark_failed(exc)
+        return
+
+    except Exception as exc:
+        mark_failed(f"Unexpected report error: {exc}")
+        raise
+
+    finally:
+        # Safety net for exceptions that do not get handled as expected.
+        if job is not None:
+            ReportJob.objects.filter(
+                id=job.id,
+                status="running",
+            ).update(
+                status="failed",
+                error_message="Report task exited unexpectedly.",
+                completed_at=timezone.now(),
+            )
