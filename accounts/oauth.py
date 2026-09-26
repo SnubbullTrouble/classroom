@@ -15,7 +15,7 @@ class GitHubOAuthError(Exception):
 def _require_settings():
     if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
         raise GitHubOAuthError(
-            "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be configured."
+            "CLIENT_ID and CLIENT_SECRET must be configured."
         )
 
 

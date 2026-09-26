@@ -27,8 +27,8 @@ if [ ! -f .env ]; then
     sed -i "s|^DJANGO_CSRF_TRUSTED_ORIGINS=.*|DJANGO_CSRF_TRUSTED_ORIGINS=https://${host}|" .env
     sed -i "s|^GITHUB_OAUTH_REDIRECT_URI=.*|GITHUB_OAUTH_REDIRECT_URI=https://${host}/auth/github/callback/|" .env
   fi
-  if [ -z "${GITHUB_CLIENT_ID:-}" ] || [ -z "${GITHUB_CLIENT_SECRET:-}" ]; then
-    echo "Created .env — fill in GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET (or add them as Codespaces secrets)."
+  if [ -z "${CLIENT_ID:-}" ] || [ -z "${CLIENT_SECRET:-}" ]; then
+    echo "Created .env — fill in CLIENT_ID / CLIENT_SECRET (or add them as Codespaces secrets)."
   fi
 fi
 

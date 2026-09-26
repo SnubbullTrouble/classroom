@@ -18,11 +18,11 @@
   // Codespaces prompts for these when a codespace is created and exposes them
   // as environment variables, which take precedence over the placeholders in .env.
   "secrets": {
-    "GITHUB_CLIENT_ID": {
+    "CLIENT_ID": {
       "description": "Client ID of the GitHub OAuth App used to sign in.",
       "documentationUrl": "https://docs.github.com/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
     },
-    "GITHUB_CLIENT_SECRET": {
+    "CLIENT_SECRET": {
       "description": "Client secret of the GitHub OAuth App used to sign in.",
       "documentationUrl": "https://docs.github.com/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
     },
