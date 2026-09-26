@@ -11,9 +11,13 @@ services:
       # Keeps terminal command history across container rebuilds.
       - shell-history:/home/vscode/.shell-history
     command: sleep infinity
+    # service_started, not service_healthy: Codespaces rebuilds with
+    # `up --no-recreate`, which reuses an existing redis container even if it
+    # predates the healthcheck below, and service_healthy then fails the whole
+    # build. Nothing at startup needs Redis ready, only running (for network_mode).
     depends_on:
       redis:
-        condition: service_healthy
+        condition: service_started
     # Share Redis's network namespace so the defaults in .env.example
     # (redis://127.0.0.1:6379/0) work unchanged.
     network_mode: service:redis
