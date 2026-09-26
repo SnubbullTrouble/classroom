@@ -9,6 +9,25 @@
       "args": ["runserver", "0.0.0.0:8000"],
       "django": true,
       "justMyCode": true
+    },
+    {
+      // Redis runs as its own container (see .devcontainer/docker-compose.yml),
+      // so only the worker needs starting. The solo pool runs tasks in this
+      // process, which lets breakpoints in tasks work.
+      "name": "Celery: worker",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "args": ["-A", "config", "worker", "--loglevel=info", "--pool=solo"],
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Django + Celery",
+      "configurations": ["Django: runserver", "Celery: worker"],
+      "stopAll": true
     }
   ]
 }
