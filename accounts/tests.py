@@ -56,6 +56,30 @@ class GitHubOAuthTests(TestCase):
         self.assertEqual(identity.encrypted_token, "github-access-token")
         exchange_code_mock.assert_called_once_with("oauth-code")
 
+    @patch("accounts.views.get_user")
+    @patch("accounts.views.exchange_code")
+    def test_callback_redirects_to_next_from_login(
+        self,
+        exchange_code_mock,
+        get_user_mock,
+    ):
+        self.client.get("/auth/github/login/?next=/assignments/")
+        state = self.client.session["github_oauth_state"]
+        exchange_code_mock.return_value = "github-access-token"
+        get_user_mock.return_value = {"id": 12345, "login": "octocat"}
+
+        response = self.client.get(
+            f"/auth/github/callback/?code=oauth-code&state={state}"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/assignments/")
+
+    def test_login_ignores_offsite_next(self):
+        self.client.get("/auth/github/login/?next=https://evil.example.com/")
+
+        self.assertNotIn("github_oauth_next", self.client.session)
+
     def test_callback_rejects_invalid_state(self):
         session = self.client.session
         session["github_oauth_state"] = "expected-state"

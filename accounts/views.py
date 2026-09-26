@@ -5,6 +5,7 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.utils.crypto import constant_time_compare
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET
 
 from .models import GitHubIdentity
@@ -15,6 +16,14 @@ from .oauth import GitHubOAuthError, authorization_url, exchange_code, get_user
 def github_login(request):
     state = secrets.token_urlsafe(32)
     request.session["github_oauth_state"] = state
+    # Remember where @login_required came from so the callback can return there.
+    next_url = request.GET.get("next", "")
+    if url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        request.session["github_oauth_next"] = next_url
+    else:
+        request.session.pop("github_oauth_next", None)
     try:
         url = authorization_url(state)
     except GitHubOAuthError as exc:
@@ -74,7 +83,10 @@ def github_callback(request):
             },
         )
 
+    next_url = request.session.pop("github_oauth_next", "")
     login(request, user)
+    if next_url:
+        return redirect(next_url)
     return JsonResponse(
         {
             "authenticated": True,
