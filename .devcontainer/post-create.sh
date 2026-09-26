@@ -27,7 +27,12 @@ if [ ! -f .env ]; then
     sed -i "s|^DJANGO_CSRF_TRUSTED_ORIGINS=.*|DJANGO_CSRF_TRUSTED_ORIGINS=https://${host}|" .env
     sed -i "s|^GITHUB_OAUTH_REDIRECT_URI=.*|GITHUB_OAUTH_REDIRECT_URI=https://${host}/auth/github/callback/|" .env
   fi
-  if [ -z "${CLIENT_ID:-}" ] || [ -z "${CLIENT_SECRET:-}" ]; then
+  if [ -n "${CLIENT_ID:-}" ] && [ -n "${CLIENT_SECRET:-}" ]; then
+    # VS Code's debugger loads .env into launched processes, so placeholders
+    # left here would override the Codespaces secrets.
+    sed -i "s|^CLIENT_ID=.*|# CLIENT_ID comes from the Codespaces secret|" .env
+    sed -i "s|^CLIENT_SECRET=.*|# CLIENT_SECRET comes from the Codespaces secret|" .env
+  else
     echo "Created .env — fill in CLIENT_ID / CLIENT_SECRET (or add them as Codespaces secrets)."
   fi
 fi
