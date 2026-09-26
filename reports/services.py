@@ -11,18 +11,6 @@ from django.utils import timezone as django_timezone
 from assignments.models import Assignment, Report
 from github_integration import GitHubClient, GitHubError
 
-SCORE_PATTERNS = (
-    re.compile(
-        r"\btotal\s+points\s+for\s+[^:\r\n]{1,200}:\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\bscore\s*[:=]\s*(\d+(?:\.\d+)?)\s*(?:/|out of)\s*(\d+(?:\.\d+)?)\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\bscore\s*[:=]\s*(\d+(?:\.\d+)?)\s*%", re.IGNORECASE),
-)
-
 
 def parse_time(value):
     if not value:
@@ -48,32 +36,6 @@ def extract_log_text(log_bytes):
 
     # Not a ZIP: treat it as ordinary text
     return log_bytes.decode("utf-8", errors="replace")
-
-
-NUMBER = r"\d+(?:\.\d+)?"
-
-NAMED_SCORE_PATTERN = re.compile(
-    rf"^\s*(?P<test_name>[^:\r\n]+?)\s*:\s*"
-    rf"(?P<earned>{NUMBER})\s*/\s*(?P<maximum>{NUMBER})\s*$",
-    re.IGNORECASE,
-)
-
-
-def extract_named_scores(log_text):
-    scores = {}
-
-    for line in log_text.splitlines():
-        match = NAMED_SCORE_PATTERN.match(line)
-        if not match:
-            continue
-
-        test_name = match.group("test_name").strip()
-        earned = match.group("earned")
-        maximum = match.group("maximum")
-
-        scores[test_name] = f"{earned}/{maximum}"
-
-    return scores
 
 
 def score_value(score):
@@ -151,68 +113,57 @@ def _collect_job_scores(github_client, organization, repository_name, run_id):
 NUMBER = r"\d+(?:\.\d+)?"
 
 ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+LOG_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\S+\s*")
 
-NAMED_SCORE_PATTERN = re.compile(
-    rf"(?P<test_name>[A-Za-z0-9][^:\r\n]{{0,200}}?)"
-    rf"\s*(?::|=|-)\s*"
+# GitHub Classroom's autograding reporter prints one line per test, e.g.
+#   Total points for compiles: 2.00/2
+TEST_SCORE_PATTERN = re.compile(
+    rf"\bTotal points for (?P<test_name>[^:\r\n]{{1,200}}?)\s*:\s*"
     rf"(?P<earned>{NUMBER})\s*/\s*(?P<maximum>{NUMBER})",
     re.IGNORECASE,
 )
 
-GENERIC_SCORE_PATTERN = re.compile(
-    rf"\b(?P<earned>{NUMBER})\s*/\s*(?P<maximum>{NUMBER})\b"
+# ...followed by an overall notice ("##[notice]Points 10/10"). Only used when a
+# log has no per-test lines, so the total is never counted twice.
+AUTOGRADER_TOTAL_PATTERN = re.compile(
+    rf"(?:##\[notice\]|::notice::)\s*Points\s+(?P<earned>{NUMBER})\s*/\s*(?P<maximum>{NUMBER})",
+    re.IGNORECASE,
 )
 
 
+def _format_number(value):
+    return f"{float(value):g}"
+
+
 def extract_named_scores(log_text):
+    """Return autograder test scores ({"compiles": "2/2", ...}) from a job log.
+
+    Other "x/y" output in the log (git progress, tests-passed counts, the
+    overall points notice) is ignored so it can't inflate the total.
+    """
     scores = {}
+    overall = None
 
     for raw_line in log_text.splitlines():
-        line = ANSI_ESCAPE.sub("", raw_line).strip()
+        line = LOG_TIMESTAMP.sub("", ANSI_ESCAPE.sub("", raw_line)).strip()
 
-        # Remove common GitHub Actions log prefixes such as:
-        # 2026-09-22T12:34:56.000Z
-        line = re.sub(
-            r"^\d{4}-\d{2}-\d{2}T[^\s]+\s*",
-            "",
-            line,
-        ).strip()
-
-        match = NAMED_SCORE_PATTERN.search(line)
-
+        match = TEST_SCORE_PATTERN.search(line)
         if match:
-            test_name = match.group("test_name").strip()
-            earned = match.group("earned")
-            maximum = match.group("maximum")
-
-            # Prevent generic summary labels from becoming test names.
-            if test_name.casefold() not in {
-                "score",
-                "points",
-                "total",
-                "total points",
-                "tests passed",
-            }:
-                scores[test_name] = f"{earned}/{maximum}"
-
+            scores[match.group("test_name").strip()] = (
+                f"{_format_number(match.group('earned'))}/"
+                f"{_format_number(match.group('maximum'))}"
+            )
             continue
 
-        # Handles lines like:
-        # Autograder points: 8/10
-        # Score: 9/10
-        match = GENERIC_SCORE_PATTERN.search(line)
+        match = AUTOGRADER_TOTAL_PATTERN.search(line)
+        if match:
+            overall = (
+                f"{_format_number(match.group('earned'))}/"
+                f"{_format_number(match.group('maximum'))}"
+            )
 
-        if match and re.search(
-            r"\b(score|points?|passed|total|autograder)\b",
-            line,
-            re.IGNORECASE,
-        ):
-            test_name = line[: match.start()].strip(" :-=")
-
-            if not test_name:
-                test_name = "Unnamed test"
-
-            scores[test_name] = f"{match.group('earned')}/{match.group('maximum')}"
+    if not scores and overall:
+        scores["Autograder total"] = overall
 
     return scores
 

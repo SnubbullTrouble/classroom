@@ -8,7 +8,12 @@ from assignments.models import Assignment, Course, Student, StudentRepository
 
 from github_integration import GitHubError
 
-from .services import extract_log_text, extract_scores, report_data, summarize_scores
+from .services import (
+    extract_log_text,
+    extract_named_scores,
+    report_data,
+    summarize_scores,
+)
 
 
 class ReportServiceTests(TestCase):
@@ -34,9 +39,28 @@ class ReportServiceTests(TestCase):
             repository_name="homework_0_hello_world_ada",
         )
 
-    def test_extracts_supported_scores_and_totals(self):
-        log_text = "test score: 8/10\ntest total points for quiz: 9 / 10"
-        self.assertEqual(extract_scores(log_text, "test"), "8/10, 9/10")
+    def test_extracts_only_autograder_test_scores(self):
+        log_text = "\n".join(
+            [
+                "2026-09-22T12:00:00.0000000Z Receiving objects: 100% (12/12), done.",
+                "2026-09-22T12:00:01.0000000Z Total points for compiles: 2.00/2",
+                "2026-09-22T12:00:01.0000000Z Total points for hasCout: 1.50/3",
+                "2026-09-22T12:00:02.0000000Z Grand total tests passed: 1/2",
+                "2026-09-22T12:00:02.0000000Z ##[notice]Points 3.5/5",
+            ]
+        )
+
+        self.assertEqual(
+            extract_named_scores(log_text),
+            {"compiles": "2/2", "hasCout": "1.5/3"},
+        )
+
+    def test_falls_back_to_autograder_total_without_test_lines(self):
+        log_text = "Step 1/3\n##[notice]Points 6/10"
+
+        self.assertEqual(extract_named_scores(log_text), {"Autograder total": "6/10"})
+
+    def test_summarizes_scores_with_penalty(self):
         self.assertEqual(
             summarize_scores({"test": "8/10", "quiz": "90%"}, -2),
             {
@@ -57,7 +81,7 @@ class ReportServiceTests(TestCase):
         github.get_workflow_jobs.return_value = [
             {"id": 10, "steps": [{"name": "tests"}]},
         ]
-        github.get_job_logs.return_value = b"tests score: 8/10"
+        github.get_job_logs.return_value = b"Total points for tests: 8/10"
 
         data = report_data(self.assignment, github)
 
