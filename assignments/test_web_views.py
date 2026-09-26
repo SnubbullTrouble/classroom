@@ -70,6 +70,51 @@ class AssignmentDashboardTests(TestCase):
         self.assertRedirects(response, "/assignments/")
         self.assertEqual(assignment.status, "draft")
 
+    def _names_in_order(self, response):
+        return [assignment.name for assignment in response.context["assignments"]]
+
+    def test_dashboard_sorts_by_due_date_by_default_and_remembers_choice(self):
+        Assignment.objects.create(
+            course=self.course,
+            created_by=self.user,
+            name="Arrays",
+            template_repository="homework_1_arrays",
+            due_at=datetime(2026, 9, 10, 21, 5, tzinfo=timezone.utc),
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get("/assignments/")
+        self.assertEqual(self._names_in_order(response), ["Arrays", "Hello World"])
+
+        response = self.client.get("/assignments/?sort=due_desc")
+        self.assertEqual(self._names_in_order(response), ["Hello World", "Arrays"])
+
+        response = self.client.get("/assignments/")
+        self.assertEqual(self._names_in_order(response), ["Hello World", "Arrays"])
+
+    def test_dashboard_sorts_by_status_in_workflow_order(self):
+        Assignment.objects.create(
+            course=self.course,
+            created_by=self.user,
+            name="Arrays",
+            template_repository="homework_1_arrays",
+            due_at=datetime(2026, 9, 10, 21, 5, tzinfo=timezone.utc),
+            status="active",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get("/assignments/?sort=status")
+
+        self.assertEqual(self._names_in_order(response), ["Hello World", "Arrays"])
+
+    def test_dashboard_ignores_unknown_sort(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get("/assignments/?sort=bogus")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["sort"], "due")
+
     def test_dashboard_does_not_show_another_users_assignments(self):
         other_course = Course.objects.create(
             owner=self.other_user,

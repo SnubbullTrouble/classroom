@@ -55,6 +55,18 @@
         .empty p { margin: 0; color: var(--muted); line-height: 1.55; }
         .notice { margin: 0 0 26px; padding: 13px 16px; background: rgba(233, 185, 73, .18); border-left: 3px solid var(--yellow); font: 600 .88rem/1.4 "Segoe UI", sans-serif; }
         .publish-form { display: inline; }
+        .sort { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 600 .82rem "Segoe UI", sans-serif; }
+        .sort select { padding: 8px 10px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); font: 600 .82rem "Segoe UI", sans-serif; }
+        .action:disabled { opacity: .55; cursor: progress; }
+        .working { margin-top: 18px; }
+        .working .progress { position: relative; height: 10px; overflow: hidden; background: var(--line); }
+        .working .bar { position: absolute; top: 0; left: -40%; width: 40%; height: 100%; background: var(--green); animation: slide 1.3s ease-in-out infinite; }
+        .working .status { margin: 10px 0 0; color: var(--green); font: 700 .85rem "Segoe UI", sans-serif; }
+        @keyframes slide { to { left: 100%; } }
+        @media (prefers-reduced-motion: reduce) {
+            .working .bar { left: 0; width: 100%; animation: pulse 1.6s ease-in-out infinite alternate; }
+            @keyframes pulse { from { opacity: .35; } to { opacity: 1; } }
+        }
         @media (max-width: 620px) {
             .shell { padding: 20px 16px 48px; }
             .topbar { align-items: flex-start; }
@@ -88,6 +100,17 @@
                 <h2 id="assignments-heading">Assignments</h2>
                 <div class="actions">
                     <a class="action" href="/assignments/import/">Import assignment</a>
+                    {% if assignments|length > 1 %}
+                        <form class="sort" method="get">
+                            <label for="sort">Sort by</label>
+                            <select id="sort" name="sort" onchange="this.form.submit()">
+                                {% for key, label in sort_options %}
+                                    <option value="{{ key }}"{% if key == sort %} selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <noscript><button class="action secondary" type="submit">Sort</button></noscript>
+                        </form>
+                    {% endif %}
                     <span class="count">{{ assignments|length }} total</span>
                 </div>
             </div>
@@ -118,12 +141,12 @@
                             </dl>
                             <div class="actions">
                                 {% if assignment.status == "draft" %}
-                                    <form class="publish-form" method="post" action="/assignments/{{ assignment.id }}/publish/">
+                                    <form class="publish-form" method="post" action="/assignments/{{ assignment.id }}/publish/" data-working="Publishing… creating repositories on GitHub. This can take a minute.">
                                         {% csrf_token %}
                                         <button class="action" type="submit">Publish assignment</button>
                                     </form>
                                 {% else %}
-                                    <form class="publish-form" method="post" action="/assignments/{{ assignment.id }}/retry-repositories/">
+                                    <form class="publish-form" method="post" action="/assignments/{{ assignment.id }}/retry-repositories/" data-working="Retrying repositories on GitHub…">
                                         {% csrf_token %}
                                         <button class="action secondary" type="submit">Retry repositories</button>
                                     </form>
@@ -141,5 +164,27 @@
             {% endif %}
         </section>
     </main>
+    <script>
+        // Publish and retry run inside the request, so show that GitHub work is
+        // underway and stop a second click from starting it again.
+        document.querySelectorAll(".publish-form").forEach(form => {
+            form.addEventListener("submit", () => {
+                document.querySelectorAll(".publish-form button").forEach(button => { button.disabled = true; });
+                const working = document.createElement("div");
+                working.className = "working";
+                working.setAttribute("role", "status");
+                working.innerHTML = `<div class="progress"><div class="bar"></div></div><p class="status"></p>`;
+                working.querySelector(".status").textContent = form.dataset.working;
+                form.closest(".assignment").appendChild(working);
+            });
+        });
+
+        // Coming back with the Back button can restore the page mid-request.
+        window.addEventListener("pageshow", event => {
+            if (!event.persisted) return;
+            document.querySelectorAll(".working").forEach(el => el.remove());
+            document.querySelectorAll(".publish-form button").forEach(button => { button.disabled = false; });
+        });
+    </script>
 </body>
 </html>
