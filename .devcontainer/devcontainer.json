@@ -1,0 +1,65 @@
+{
+  "name": "classroom",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "shutdownAction": "stopCompose",
+
+  "hostRequirements": {
+    "cpus": 4
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/git-lfs:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  },
+
+  // Codespaces prompts for these when a codespace is created and exposes them
+  // as environment variables, which take precedence over the placeholders in .env.
+  "secrets": {
+    "GITHUB_CLIENT_ID": {
+      "description": "Client ID of the GitHub OAuth App used to sign in.",
+      "documentationUrl": "https://docs.github.com/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
+    },
+    "GITHUB_CLIENT_SECRET": {
+      "description": "Client secret of the GitHub OAuth App used to sign in.",
+      "documentationUrl": "https://docs.github.com/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
+    },
+    "CLAUDE_CODE_OAUTH_TOKEN": {
+      "description": "Optional. Long-lived Claude Code token from `claude setup-token`, so Claude never asks you to log in.",
+      "documentationUrl": "https://docs.anthropic.com/en/docs/claude-code/setup"
+    }
+  },
+
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "Django", "onAutoForward": "notify" }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "batisteo.vscode-django",
+        "charliermarsh.ruff",
+        "anthropic.claude-code",
+        "eamodio.gitlens",
+        "cweijan.vscode-redis-client"
+      ],
+      "settings": {
+        "workbench.colorTheme": "Default Dark Modern",
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestEnabled": false,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true
+        }
+      }
+    }
+  }
+}
