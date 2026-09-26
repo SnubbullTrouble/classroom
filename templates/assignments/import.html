@@ -48,6 +48,9 @@
         const organizationInput = document.querySelector("#id_github_organization");
         const templateInput = document.querySelector("#id_template_repository");
         let templateSelect = null;
+        // Changing organization while a lookup is in flight starts another one;
+        // only the latest may update the page, or both add a dropdown.
+        let latestRequest = 0;
 
         function showTemplateInput(message) {
             if (templateSelect) templateSelect.remove();
@@ -65,6 +68,7 @@
         }
 
         async function loadTemplates() {
+            const request = ++latestRequest;
             const organization = organizationInput.value.trim();
             const previousTemplate = templateInput.value;
             templateInput.value = "";
@@ -75,11 +79,14 @@
                 const response = await fetch(`/api/github/templates/?organization=${encodeURIComponent(organization)}`, { headers: { "Accept": "application/json" } });
                 if (!response.ok) throw new Error("Template discovery failed");
                 const data = await response.json();
+                if (request !== latestRequest) return;
                 const templates = data.templates || [];
                 if (!templates.length) {
                     showTemplateInput("No template repositories found; enter the repository name manually.");
                     return;
                 }
+                const loading = document.querySelector(".loading");
+                if (loading) loading.remove();
                 templateInput.hidden = true;
                 templateInput.disabled = true;
                 templateSelect = document.createElement("select");
@@ -100,6 +107,7 @@
                 templateSelect.addEventListener("change", () => { templateInput.value = templateSelect.value; });
                 templateInput.parentElement.insertBefore(templateSelect, templateInput);
             } catch (error) {
+                if (request !== latestRequest) return;
                 showTemplateInput("Template discovery failed; enter the repository name manually.");
             }
         }
