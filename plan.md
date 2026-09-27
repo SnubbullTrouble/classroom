@@ -36,8 +36,8 @@ Remaining:
 - [ ] Test repository retry against a real missing invitation.
 - [ ] Test report refresh after a new late submission.
 - [ ] Create a Git checkpoint commit for the completed foundation.
-- [ ] Add PostgreSQL configuration using `DATABASE_URL`.
-- [ ] Add production deployment configuration and process supervision.
+- [x] Add PostgreSQL configuration using `DATABASE_URL`.
+- [x] Add production deployment configuration and process supervision (Render Blueprint: `render.yaml`, `DEPLOYMENT.md`).
 - [ ] Add stronger GitHub rate-limit and retry handling.
 - [ ] Decide whether a GitHub App should replace the OAuth token model.
 - [ ] Add frontend editing for existing drafts.
@@ -363,7 +363,7 @@ Django project
 1. Verify repository retry with one student who has not accepted an invitation.
 2. Verify report refresh after a new GitHub Actions run appears.
 3. Create a Git checkpoint commit before the next feature slice.
-4. Add PostgreSQL settings and a production `DATABASE_URL` path.
-5. Choose a deployment platform and configure web, worker, Redis, database, and HTTPS.
+4. ~~Add PostgreSQL settings and a production `DATABASE_URL` path.~~ Done.
+5. ~~Choose a deployment platform and configure web, worker, Redis, database, and HTTPS.~~ Done — Render, see `render.yaml` and `DEPLOYMENT.md`.
 6. Run `python manage.py check --deploy` and complete a staging deployment.
 7. Decide whether to keep OAuth tokens or migrate to a GitHub App.
