@@ -1,4 +1,5 @@
 from django.http import JsonResponse
+from django.shortcuts import redirect
 from django.urls import include, path
 
 from accounts.views import github_callback, github_login, logout_view
@@ -15,19 +16,12 @@ def health_check(request):
     return JsonResponse({"status": "ok"})
 
 
-def service_index(request):
-    return JsonResponse(
-        {
-            "name": "Classroom API",
-            "status": "ok",
-            "health": "/health/",
-            "api": "/api/",
-        }
-    )
+def homepage(request):
+    return redirect("assignment-dashboard")
 
 
 urlpatterns = [
-    path("", service_index, name="service-index"),
+    path("", homepage, name="service-index"),
     path("health/", health_check, name="health-check"),
     path("auth/github/login/", github_login, name="github-login"),
     path("auth/github/callback/", github_callback, name="github-callback"),
