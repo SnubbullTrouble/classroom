@@ -9,6 +9,7 @@ from assignments.web_views import (
     assignment_report_page,
     publish_assignment_view,
     retry_assignment_repositories_view,
+    retry_report_job_view,
 )
 
 
@@ -32,6 +33,11 @@ urlpatterns = [
         "assignments/<int:assignment_id>/report/",
         assignment_report_page,
         name="assignment-report-page",
+    ),
+    path(
+        "assignments/<int:assignment_id>/report/retry/",
+        retry_report_job_view,
+        name="assignment-report-retry",
     ),
     path(
         "assignments/<int:assignment_id>/publish/",

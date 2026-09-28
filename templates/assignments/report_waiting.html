@@ -14,6 +14,10 @@
         .bar { width: 0; height: 100%; background: var(--green); transition: width .3s ease; }
         .status { color: var(--green); font-weight: 700; }
         a { color: var(--green); font-weight: 700; }
+        .stuck { display: none; margin-top: 22px; padding-top: 18px; border-top: 1px solid #d9ded5; }
+        .retry-form { display: inline; }
+        .retry-button { padding: 8px 11px; color: #9c3d2e; background: rgba(255, 253, 247, .7); border: 1px solid #d9a89c; font: 700 .76rem "Segoe UI", sans-serif; cursor: pointer; }
+        .retry-button:hover { background: #f8dfdb; border-color: #9c3d2e; }
     </style>
 </head>
 <body>
@@ -23,11 +27,20 @@
         <div class="progress"><div class="bar" id="bar"></div></div>
         <p class="status" id="status">Queued...</p>
         <p><a href="/assignments/">Return to assignments</a></p>
+        <div class="stuck" id="stuck">
+            <p>Still stuck after a while? The background job may have died without updating its status.</p>
+            <form class="retry-form" method="post" action="/assignments/{{ assignment.id }}/report/retry/">
+                {% csrf_token %}
+                <button class="retry-button" type="submit" onclick="return confirm('Cancel the stuck job and start a new report?');">Cancel &amp; retry</button>
+            </form>
+        </div>
     </main>
     <script>
         const bar = document.querySelector("#bar");
         const status = document.querySelector("#status");
+        const stuck = document.querySelector("#stuck");
         const jobUrl = "/api/report-jobs/{{ job.id }}/";
+        const stuckTimer = window.setTimeout(() => { stuck.style.display = "block"; }, 45000);
 
         async function poll() {
             const response = await fetch(jobUrl, { headers: { "Accept": "application/json" } });
@@ -38,11 +51,14 @@
             bar.style.width = `${percent}%`;
             status.textContent = job.status === "running" ? `Collected ${completed} of ${total} repositories` : `${job.status}...`;
             if (job.status === "completed") {
+                window.clearTimeout(stuckTimer);
                 window.location.reload();
                 return;
             }
             if (job.status === "failed") {
+                window.clearTimeout(stuckTimer);
                 status.textContent = job.error_message || "Report generation failed.";
+                stuck.style.display = "block";
                 return;
             }
             window.setTimeout(poll, 1500);

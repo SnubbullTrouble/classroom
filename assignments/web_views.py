@@ -65,6 +65,21 @@ def _discover_import_options(identity, force_refresh=False):
         return [], [], str(exc)
 
 
+def _queue_new_report_job(request, assignment):
+    job = ReportJob.objects.create(
+        assignment=assignment,
+        requested_by=request.user,
+        total_items=assignment.student_repositories.count(),
+    )
+    try:
+        generate_report_job.delay(job.id)
+    except Exception as exc:
+        job.status = "failed"
+        job.error_message = str(exc)
+        job.save(update_fields=["status", "error_message"])
+    return job
+
+
 def _get_or_queue_report_job(request, assignment):
     job = assignment.report_jobs.filter(
         requested_by=request.user,
@@ -82,18 +97,7 @@ def _get_or_queue_report_job(request, assignment):
     if recent_job is not None:
         return recent_job
 
-    job = ReportJob.objects.create(
-        assignment=assignment,
-        requested_by=request.user,
-        total_items=assignment.student_repositories.count(),
-    )
-    try:
-        generate_report_job.delay(job.id)
-    except Exception as exc:
-        job.status = "failed"
-        job.error_message = str(exc)
-        job.save(update_fields=["status", "error_message"])
-    return job
+    return _queue_new_report_job(request, assignment)
 
 
 @login_required(login_url="/auth/github/login/")
@@ -244,6 +248,39 @@ def assignment_report_page(request, assignment_id):
         {
             "assignment": assignment,
             "report": report,
+        },
+    )
+
+
+@login_required(login_url="/auth/github/login/")
+@require_POST
+def retry_report_job_view(request, assignment_id):
+    assignment = get_object_or_404(
+        Assignment,
+        pk=assignment_id,
+        course__owner=request.user,
+    )
+
+    identity = getattr(request.user, "github_identity", None)
+    if identity is None or identity.revoked_at is not None:
+        messages.error(request, "Sign in with GitHub before generating a report.")
+        return redirect("assignment-dashboard")
+
+    # Drop any stuck queued/running job (e.g. left behind by a worker that
+    # crashed mid-run) so a fresh one can take its place.
+    assignment.report_jobs.filter(
+        requested_by=request.user,
+        status__in=["queued", "running"],
+    ).delete()
+
+    job = _queue_new_report_job(request, assignment)
+
+    return render(
+        request,
+        "assignments/report_waiting.html",
+        {
+            "assignment": assignment,
+            "job": job,
         },
     )
 
