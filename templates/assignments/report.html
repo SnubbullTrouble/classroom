@@ -45,12 +45,16 @@
         .submission-missing { color: var(--red); }
         .missing { color: var(--red); font-weight: 700; }
         .empty { color: var(--muted); }
+        .notice { margin: 0 0 20px; padding: 13px 16px; background: rgba(233, 185, 73, .18); border-left: 3px solid #e9b949; font-size: .88rem; }
         @media (max-width: 620px) { .shell { padding: 22px 14px 48px; } header { display: block; margin-top: 42px; } .generated { margin-top: 12px; } }
     </style>
 </head>
 <body>
     <main class="shell">
         <a class="back" href="/assignments/">← Back to assignments</a>
+        {% for message in messages %}
+            <div class="notice">{{ message }}</div>
+        {% endfor %}
         <header>
             <h1>{{ assignment.name }}</h1>
             <div class="generated">
@@ -99,6 +103,7 @@
                         <td><div class="student">{{ row.student }}</div><div class="repo">{{ row.repository }}</div></td>
                         <td>
                             {% if row.status == "no_runs" %}<span class="missing">No workflow runs</span>
+                            {% elif row.status == "error" %}<div class="submission {{ row|submission_tone }}">Collection error</div><div class="time {{ row|submission_tone }}">{{ row.error }}</div>
                             {% else %}<div class="submission {{ row|submission_tone }}">{{ row.status }}{% if row.late_penalty < 0 %} · late{% endif %}</div><div class="time {{ row|submission_tone }}">{{ row.submitted_at|local_time }}</div>{% endif %}
                         </td>
                         <td>

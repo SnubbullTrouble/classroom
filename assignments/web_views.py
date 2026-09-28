@@ -5,7 +5,9 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import urlencode
 from datetime import timedelta
 from django.views.decorators.http import require_POST
 import requests
@@ -63,6 +65,15 @@ def _discover_import_options(identity, force_refresh=False):
         return organizations, templates, ""
     except (GitHubError, requests.RequestException) as exc:
         return [], [], str(exc)
+
+
+def _redirect_to_github_login(request):
+    messages.info(
+        request,
+        "Your GitHub sign-in has expired. Please sign in again to continue.",
+    )
+    login_url = reverse("github-login") + "?" + urlencode({"next": request.path})
+    return redirect(login_url)
 
 
 def _queue_new_report_job(request, assignment):
@@ -211,11 +222,7 @@ def assignment_report_page(request, assignment_id):
         identity = getattr(request.user, "github_identity", None)
 
         if identity is None or identity.revoked_at is not None:
-            messages.error(
-                request,
-                "Sign in with GitHub before generating a report.",
-            )
-            return redirect("assignment-dashboard")
+            return _redirect_to_github_login(request)
 
         job = _get_or_queue_report_job(request, assignment)
 
@@ -263,8 +270,7 @@ def retry_report_job_view(request, assignment_id):
 
     identity = getattr(request.user, "github_identity", None)
     if identity is None or identity.revoked_at is not None:
-        messages.error(request, "Sign in with GitHub before generating a report.")
-        return redirect("assignment-dashboard")
+        return _redirect_to_github_login(request)
 
     # Drop any stuck queued/running job (e.g. left behind by a worker that
     # crashed mid-run) so a fresh one can take its place.

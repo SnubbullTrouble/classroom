@@ -5,7 +5,7 @@ import requests
 
 from accounts.models import GitHubIdentity
 from assignments.models import ReportJob
-from github_integration import GitHubClient, GitHubError
+from github_integration import GitHubAuthError, GitHubClient, GitHubError
 
 from .services import generate_report
 
@@ -82,6 +82,12 @@ def generate_report_job(self, job_id):
 
         identity.last_used_at = timezone.now()
         identity.save(update_fields=["last_used_at", "updated_at"])
+
+    except GitHubAuthError:
+        identity.revoked_at = timezone.now()
+        identity.save(update_fields=["revoked_at", "updated_at"])
+        mark_failed("Your GitHub sign-in is no longer valid. Please sign in again.")
+        return
 
     except (
         GitHubError,

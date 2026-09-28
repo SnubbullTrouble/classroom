@@ -57,6 +57,11 @@
             }
             if (job.status === "failed") {
                 window.clearTimeout(stuckTimer);
+                if (job.needs_reauth) {
+                    status.textContent = "Your GitHub sign-in has expired. Redirecting you to sign in again...";
+                    window.location.href = `/auth/github/login/?next=${encodeURIComponent(window.location.pathname)}`;
+                    return;
+                }
                 status.textContent = job.error_message || "Report generation failed.";
                 stuck.style.display = "block";
                 return;

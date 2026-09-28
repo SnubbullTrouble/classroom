@@ -11,6 +11,14 @@ LOG_TIMEOUT = (5, 20)
 class GitHubError(Exception):
     """Raised when GitHub rejects an API request."""
 
+    def __init__(self, message, status_code=None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GitHubAuthError(GitHubError):
+    """Raised when GitHub rejects an API request because the token is invalid."""
+
 
 class GitHubClient:
     def __init__(self, token, *, base_url=API_URL, debug=False, session=None):
@@ -54,8 +62,12 @@ class GitHubClient:
                 message = response.json().get("message", response.text)
             except ValueError:
                 message = response.text
-            raise GitHubError(
-                f"{method} {path} failed ({response.status_code}): {message}"
+            error_class = (
+                GitHubAuthError if response.status_code == 401 else GitHubError
+            )
+            raise error_class(
+                f"{method} {path} failed ({response.status_code}): {message}",
+                status_code=response.status_code,
             )
 
         if not response.content:
@@ -201,7 +213,11 @@ class GitHubClient:
             allow_redirects=True,
         )
         if not response.ok:
-            raise GitHubError(
-                f"GET {path} failed ({response.status_code}): {response.text}"
+            error_class = (
+                GitHubAuthError if response.status_code == 401 else GitHubError
+            )
+            raise error_class(
+                f"GET {path} failed ({response.status_code}): {response.text}",
+                status_code=response.status_code,
             )
         return response.content

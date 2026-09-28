@@ -204,6 +204,10 @@ class AssignmentReportJobView(APIView):
 
     @staticmethod
     def _job_data(job):
+        identity = getattr(job.requested_by, "github_identity", None)
+        needs_reauth = job.status == "failed" and (
+            identity is None or identity.revoked_at is not None
+        )
         return {
             "id": job.id,
             "status": job.status,
@@ -211,6 +215,7 @@ class AssignmentReportJobView(APIView):
             "total_items": job.total_items,
             "error_message": job.error_message,
             "report_id": job.report_id,
+            "needs_reauth": needs_reauth,
         }
 
 

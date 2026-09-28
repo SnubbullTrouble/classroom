@@ -9,7 +9,7 @@ import requests
 from django.utils import timezone as django_timezone
 
 from assignments.models import Assignment, Report
-from github_integration import GitHubClient, GitHubError
+from github_integration import GitHubAuthError, GitHubClient, GitHubError
 
 
 def parse_time(value):
@@ -96,6 +96,8 @@ def _collect_job_scores(github_client, organization, repository_name, run_id):
                     job["id"],
                 )
             )
+        except GitHubAuthError:
+            raise
         except (GitHubError, requests.RequestException):
             return {}
 
@@ -234,6 +236,11 @@ def _collect_repository_row(assignment, repository, github_client):
 def _collect_repository_row_safe(assignment, repository, github_client):
     try:
         return _collect_repository_row(assignment, repository, github_client)
+    except GitHubAuthError:
+        # The token itself is invalid, so every remaining repository will
+        # fail the same way. Let this abort the whole job instead of
+        # producing one confusing "error" row per repository.
+        raise
     except (GitHubError, requests.RequestException) as exc:
         return _error_submission(
             repository.student.github_username,
