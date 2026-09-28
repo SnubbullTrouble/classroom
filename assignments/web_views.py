@@ -67,6 +67,13 @@ def _discover_import_options(identity, force_refresh=False):
         return [], [], str(exc)
 
 
+def _invalidate_reports(assignment):
+    # Repository state just changed, so any existing report (and any job
+    # tracking one) is stale and must not be served or polled again.
+    assignment.report_jobs.all().delete()
+    assignment.reports.all().delete()
+
+
 def _redirect_to_github_login(request):
     messages.info(
         request,
@@ -314,6 +321,7 @@ def retry_assignment_repositories_view(request, assignment_id):
         messages.error(request, str(exc))
         return redirect("assignment-dashboard")
 
+    _invalidate_reports(assignment)
     identity.last_used_at = timezone.now()
     identity.save(update_fields=["last_used_at", "updated_at"])
     messages.success(
@@ -348,6 +356,7 @@ def publish_assignment_view(request, assignment_id):
         messages.error(request, str(exc))
         return redirect("assignment-dashboard")
 
+    _invalidate_reports(assignment)
     identity.last_used_at = timezone.now()
     identity.save(update_fields=["last_used_at", "updated_at"])
     messages.success(
