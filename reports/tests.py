@@ -1,4 +1,6 @@
+import time
 from datetime import datetime, timezone
+from unittest import mock
 from unittest.mock import Mock
 
 from django.contrib.auth import get_user_model
@@ -9,6 +11,7 @@ from assignments.models import Assignment, Course, Student, StudentRepository
 from github_integration import GitHubError
 
 from .services import (
+    _collect_job_scores,
     extract_log_text,
     extract_named_scores,
     report_data,
@@ -112,6 +115,26 @@ class ReportServiceTests(TestCase):
 
     def test_extract_log_text_accepts_plain_text(self):
         self.assertEqual(extract_log_text(b"plain output"), "plain output")
+
+    def test_a_stalled_job_log_does_not_block_the_others(self):
+        github = Mock()
+        github.get_workflow_jobs.return_value = [
+            {"id": 1, "steps": []},
+            {"id": 2, "steps": []},
+        ]
+
+        def get_job_logs(_organization, _repository, job_id):
+            if job_id == 1:
+                time.sleep(0.3)
+                return b"Total points for slow: 1/1"
+            return b"Total points for fast: 8/10"
+
+        github.get_job_logs.side_effect = get_job_logs
+
+        with mock.patch("reports.services.JOB_LOG_TIMEOUT_SECONDS", 0.05):
+            scores = _collect_job_scores(github, "example-org", "repo", 1)
+
+        self.assertEqual(scores, {"fast": "8/10"})
 
     def test_one_repository_error_does_not_discard_other_rows(self):
         second_student = Student.objects.create(

@@ -3,6 +3,7 @@ import re
 import zipfile
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 
 import requests
 
@@ -78,6 +79,13 @@ def _latest_run(runs):
     )
 
 
+# A request's connect/read timeout only bounds gaps between bytes, not the
+# total transfer time of a large, slow-but-still-trickling log download. This
+# is a hard wall-clock cap per job so one stuck log fetch can't stall an
+# entire report (and everyone queued behind it) indefinitely.
+JOB_LOG_TIMEOUT_SECONDS = 45
+
+
 def _collect_job_scores(github_client, organization, repository_name, run_id):
     jobs = github_client.get_workflow_jobs(
         organization,
@@ -103,11 +111,19 @@ def _collect_job_scores(github_client, organization, repository_name, run_id):
 
         return extract_named_scores(log_text)
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        scores = {}
-
-        for job_scores in executor.map(collect_job, jobs):
-            scores.update(job_scores)
+    scores = {}
+    executor = ThreadPoolExecutor(max_workers=8)
+    try:
+        futures = [executor.submit(collect_job, job) for job in jobs]
+        for future in futures:
+            try:
+                scores.update(future.result(timeout=JOB_LOG_TIMEOUT_SECONDS))
+            except FutureTimeoutError:
+                continue
+    finally:
+        # wait=False: a future that already blew its timeout is abandoned
+        # rather than joined, so it can't re-introduce the same stall here.
+        executor.shutdown(wait=False)
 
     return scores
 
