@@ -101,7 +101,7 @@ class AssignmentApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Sign in with GitHub", response.data["detail"])
 
-    @patch("api.views.generate_report_job.delay")
+    @patch("api.views.queue_report_job")
     def test_report_refresh_queues_one_job_and_reuses_it(self, delay_mock):
         identity = GitHubIdentity.objects.create(
             user=self.user,
@@ -154,7 +154,7 @@ class AssignmentApiTests(TestCase):
         self.assertEqual(response.data["templates"], [{"name": "homework"}])
         repositories_mock.assert_called_once_with("example-org")
 
-    @patch("api.views.generate_report_job.delay")
+    @patch("api.views.queue_report_job")
     def test_report_refresh_is_throttled_after_completed_job(self, delay_mock):
         identity = GitHubIdentity.objects.create(
             user=self.user,

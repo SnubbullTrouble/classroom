@@ -1,5 +1,5 @@
-from celery import shared_task
-from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
+import threading
+
 from django.utils import timezone
 import requests
 
@@ -10,14 +10,7 @@ from github_integration import GitHubAuthError, GitHubClient, GitHubError
 from .services import generate_report
 
 
-@shared_task(
-    bind=True,
-    ignore_result=True,
-    autoretry_for=(ConnectionError,),
-    retry_backoff=True,
-    max_retries=3,
-)
-def generate_report_job(self, job_id):
+def generate_report_job(job_id):
     job = ReportJob.objects.select_related(
         "assignment",
         "requested_by",
@@ -89,12 +82,7 @@ def generate_report_job(self, job_id):
         mark_failed("Your GitHub sign-in is no longer valid. Please sign in again.")
         return
 
-    except (
-        GitHubError,
-        requests.RequestException,
-        SoftTimeLimitExceeded,
-        TimeLimitExceeded,
-    ) as exc:
+    except (GitHubError, requests.RequestException) as exc:
         mark_failed(exc)
         return
 
@@ -113,3 +101,12 @@ def generate_report_job(self, job_id):
                 error_message="Report task exited unexpectedly.",
                 completed_at=timezone.now(),
             )
+
+
+def queue_report_job(job_id):
+    # Runs in-process instead of via a Celery worker: report generation is
+    # I/O-bound (GitHub API calls), so a plain thread keeps the web request
+    # from blocking without needing a separate worker service/broker. A job
+    # left "running" by a dead thread (e.g. a mid-job deploy) is recovered by
+    # the existing cancel-and-retry flow rather than any retry here.
+    threading.Thread(target=generate_report_job, args=(job_id,), daemon=True).start()

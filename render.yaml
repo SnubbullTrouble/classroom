@@ -1,9 +1,8 @@
 envVarGroups:
   - name: classroom-secrets
     envVars:
-      # Shared across both services so the worker can decrypt GitHub tokens
-      # written by the web process. Rotating this value invalidates every
-      # stored GitHubConnection/GitHubIdentity token.
+      # Rotating this value invalidates every stored
+      # GitHubConnection/GitHubIdentity token.
       - key: GITHUB_TOKEN_ENCRYPTION_KEY
         sync: false
       - key: CLIENT_ID
@@ -28,8 +27,6 @@ services:
         value: "3.13"
       - key: DJANGO_DEBUG
         value: "false"
-      - key: CELERY_TASK_ALWAYS_EAGER
-        value: "false"
       # Fill in after the first deploy once the assigned *.onrender.com
       # hostname (or custom domain) is known — see DEPLOYMENT.md.
       - key: DJANGO_ALLOWED_HOSTS
@@ -42,48 +39,6 @@ services:
         fromDatabase:
           name: classroom-db
           property: connectionString
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: classroom-redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          name: classroom-redis
-          property: connectionString
-
-  - type: worker
-    name: classroom-worker
-    runtime: python
-    plan: starter
-    buildCommand: "pip install -r requirements-webapp.txt"
-    startCommand: "celery -A config worker --loglevel=INFO"
-    envVars:
-      - fromGroup: classroom-secrets
-      - key: PYTHON_VERSION
-        value: "3.13"
-      - key: DJANGO_DEBUG
-        value: "false"
-      - key: CELERY_TASK_ALWAYS_EAGER
-        value: "false"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: classroom-db
-          property: connectionString
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: classroom-redis
-          property: connectionString
-      - key: CELERY_RESULT_BACKEND
-        fromService:
-          name: classroom-redis
-          property: connectionString
-
-  - type: keyvalue
-    name: classroom-redis
-    plan: starter
-    # No entries = no public-internet access; classroom-web and
-    # classroom-worker reach it over Render's private network regardless.
-    ipAllowList: []
 
 databases:
   - name: classroom-db

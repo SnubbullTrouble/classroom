@@ -11,7 +11,7 @@ from assignments.models import Assignment, Report, ReportJob, StudentRepository
 from assignments.publish import publish_assignment
 from github_integration import GitHubClient, GitHubError
 from reports.services import generate_report
-from reports.tasks import generate_report_job
+from reports.tasks import queue_report_job
 
 from .serializers import (
     AssignmentSerializer,
@@ -187,7 +187,7 @@ class AssignmentReportJobView(APIView):
             total_items=assignment.student_repositories.count(),
         )
         try:
-            generate_report_job.delay(job.id)
+            queue_report_job(job.id)
         except Exception as exc:
             job.status = "failed"
             job.error_message = f"Unable to queue report job: {exc}"

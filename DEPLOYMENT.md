@@ -4,15 +4,21 @@ This app deploys to [Render](https://render.com) as a Blueprint (`render.yaml`
 at the repo root). The Blueprint provisions everything in one shot:
 
 - `classroom-web` — the Django app, served by gunicorn.
-- `classroom-worker` — a Celery worker for report generation jobs.
 - `classroom-db` — managed PostgreSQL.
-- `classroom-redis` — managed Redis, used as the Celery broker/result backend.
+
+Report generation runs as a background thread inside `classroom-web` itself
+(see `reports/tasks.py`) rather than a separate worker — there's no Celery
+worker or Redis/broker service to provision. This keeps the app to a single
+paid service; the tradeoff is that a job in progress is lost if `classroom-web`
+restarts mid-run (recoverable via the report page's "Cancel & retry" button)
+and there's no hard per-job time limit beyond the per-log-fetch cap in
+`reports/services.py`.
 
 ## First deploy
 
 1. Push `render.yaml` to the branch you want deployed (usually `main`).
 2. In the Render dashboard: **New > Blueprint**, point it at this GitHub repo.
-   Render reads `render.yaml` and creates all four resources.
+   Render reads `render.yaml` and creates both resources.
 3. Render will prompt for the env vars marked `sync: false` in the
    `classroom-secrets` group before the first deploy:
    - `GITHUB_TOKEN_ENCRYPTION_KEY` — generate with:
@@ -67,8 +73,8 @@ beyond a demo.
 - `GET /health/` should return `{"status": "ok"}`.
 - `python manage.py check --deploy` should report no warnings — this is worth
   running locally against a real `DATABASE_URL` before pushing.
-- Log in through GitHub OAuth end-to-end and confirm a report job (Celery
-  task) completes — this exercises web, worker, Postgres, and Redis together.
+- Log in through GitHub OAuth end-to-end and confirm a report job completes —
+  this exercises web and Postgres together.
 
 ## Explicitly out of scope for this setup
 

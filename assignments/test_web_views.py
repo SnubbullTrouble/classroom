@@ -197,7 +197,7 @@ class AssignmentDashboardTests(TestCase):
         self.assertContains(response, "submission-on-time")
         self.assertContains(response, "Sep 20, 2026 - 4:00 PM")
 
-    @patch("assignments.web_views.generate_report_job.delay")
+    @patch("assignments.web_views.queue_report_job")
     def test_report_page_queues_work_when_no_report_exists(self, delay_mock):
         assignment = Assignment.objects.first()
         assignment.status = "active"
@@ -216,7 +216,7 @@ class AssignmentDashboardTests(TestCase):
         self.assertContains(response, "Generating Hello World")
         delay_mock.assert_called_once()
 
-    @patch("assignments.web_views.generate_report_job.delay")
+    @patch("assignments.web_views.queue_report_job")
     def test_report_page_can_refresh_an_existing_report(self, delay_mock):
         assignment = Assignment.objects.first()
         assignment.status = "active"
@@ -239,3 +239,34 @@ class AssignmentDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Generating Hello World")
         delay_mock.assert_called_once()
+
+    @patch("assignments.web_views.queue_report_job")
+    def test_report_page_surfaces_the_real_error_when_the_job_fails_to_queue(
+        self, delay_mock
+    ):
+        # e.g. the background thread fails to start.
+        delay_mock.side_effect = Exception("Could not start background thread.")
+        assignment = Assignment.objects.first()
+        assignment.status = "active"
+        assignment.save(update_fields=["status"])
+        Report.objects.create(
+            assignment=assignment,
+            generated_by=self.user,
+            data={"summary": {}, "rows": []},
+        )
+        GitHubIdentity.objects.create(
+            user=self.user,
+            github_id=456,
+            github_username="teacher",
+            encrypted_token="github-token",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.post(f"/assignments/{assignment.id}/report/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Report refresh failed: Could not start background thread.",
+        )
+        self.assertNotContains(response, "refreshed recently")

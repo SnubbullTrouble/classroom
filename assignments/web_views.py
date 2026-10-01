@@ -17,7 +17,7 @@ from github_integration import GitHubClient, GitHubError
 from .models import Assignment, ReportJob
 from .forms import AssignmentImportForm
 from .publish import publish_assignment, retry_assignment_repositories
-from reports.tasks import generate_report_job
+from reports.tasks import queue_report_job
 
 IMPORT_OPTIONS_CACHE_SECONDS = 300
 
@@ -90,7 +90,7 @@ def _queue_new_report_job(request, assignment):
         total_items=assignment.student_repositories.count(),
     )
     try:
-        generate_report_job.delay(job.id)
+        queue_report_job(job.id)
     except Exception as exc:
         job.status = "failed"
         job.error_message = str(exc)
@@ -233,7 +233,21 @@ def assignment_report_page(request, assignment_id):
 
         job = _get_or_queue_report_job(request, assignment)
 
-        if job.status in ["completed", "failed"] and report is not None:
+        if job.status == "failed" and report is not None:
+            messages.error(
+                request,
+                f"Report refresh failed: {job.error_message or 'Unknown error.'}",
+            )
+            return render(
+                request,
+                "assignments/report.html",
+                {
+                    "assignment": assignment,
+                    "report": report,
+                },
+            )
+
+        if job.status == "completed" and report is not None:
             messages.info(
                 request,
                 "A report was refreshed recently. Please wait before refreshing again.",

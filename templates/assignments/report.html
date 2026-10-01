@@ -46,6 +46,7 @@
         .missing { color: var(--red); font-weight: 700; }
         .empty { color: var(--muted); }
         .notice { margin: 0 0 20px; padding: 13px 16px; background: rgba(233, 185, 73, .18); border-left: 3px solid #e9b949; font-size: .88rem; }
+        .notice-error { background: rgba(156, 61, 46, .12); border-left-color: var(--red); color: var(--red); font-weight: 700; }
         @media (max-width: 620px) { .shell { padding: 22px 14px 48px; } header { display: block; margin-top: 42px; } .generated { margin-top: 12px; } }
     </style>
 </head>
@@ -53,7 +54,7 @@
     <main class="shell">
         <a class="back" href="/assignments/">← Back to assignments</a>
         {% for message in messages %}
-            <div class="notice">{{ message }}</div>
+            <div class="notice{% if 'error' in message.tags %} notice-error{% endif %}">{{ message }}</div>
         {% endfor %}
         <header>
             <h1>{{ assignment.name }}</h1>

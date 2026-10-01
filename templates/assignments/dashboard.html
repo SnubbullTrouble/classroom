@@ -15,6 +15,7 @@
             --green: #1f6f4a;
             --green-dark: #164d35;
             --yellow: #e9b949;
+            --red: #9c3d2e;
             --shadow: 0 18px 45px rgba(28, 45, 34, .09);
         }
 
@@ -54,6 +55,7 @@
         .empty { padding: 34px; background: rgba(255, 253, 247, .72); border: 1px dashed var(--line); }
         .empty p { margin: 0; color: var(--muted); line-height: 1.55; }
         .notice { margin: 0 0 26px; padding: 13px 16px; background: rgba(233, 185, 73, .18); border-left: 3px solid var(--yellow); font: 600 .88rem/1.4 "Segoe UI", sans-serif; }
+        .notice-error { background: rgba(156, 61, 46, .12); border-left-color: var(--red); color: var(--red); }
         .publish-form { display: inline; }
         .sort { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 600 .82rem "Segoe UI", sans-serif; }
         .sort select { padding: 8px 10px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); font: 600 .82rem "Segoe UI", sans-serif; }
@@ -94,7 +96,7 @@
 
         <section aria-labelledby="assignments-heading">
             {% for message in messages %}
-                <div class="notice">{{ message }}</div>
+                <div class="notice{% if 'error' in message.tags %} notice-error{% endif %}">{{ message }}</div>
             {% endfor %}
             <div class="section-head">
                 <h2 id="assignments-heading">Assignments</h2>

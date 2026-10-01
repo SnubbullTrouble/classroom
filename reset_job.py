@@ -5,7 +5,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from assignments.models import ReportJob
-from reports.tasks import generate_report_job
+from reports.tasks import queue_report_job
 
 job = ReportJob.objects.get(pk=3)
 
@@ -22,4 +22,4 @@ job.save()
 
 print(f"Reset job {job.id} to {job.status}")
 
-generate_report_job.delay(job.id)
+queue_report_job(job.id)
