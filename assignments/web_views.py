@@ -98,7 +98,20 @@ def _queue_new_report_job(request, assignment):
     return job
 
 
-def _get_or_queue_report_job(request, assignment):
+def _is_resolved_auth_failure(job, identity):
+    # A job that failed because the GitHub token was invalid gets replayed as
+    # the cached "recent" result below, which would show the stale auth error
+    # forever even after the user signs back in. Once their identity has been
+    # refreshed (no longer revoked) since that failure, let a fresh job run
+    # instead of re-serving the old failure.
+    return (
+        job.status == "failed"
+        and job.completed_at is not None
+        and identity.updated_at > job.completed_at
+    )
+
+
+def _get_or_queue_report_job(request, assignment, identity):
     job = assignment.report_jobs.filter(
         requested_by=request.user,
         status__in=["queued", "running"],
@@ -112,7 +125,7 @@ def _get_or_queue_report_job(request, assignment):
         created_at__gte=timezone.now()
         - timedelta(seconds=settings.REPORT_REFRESH_COOLDOWN_SECONDS),
     ).first()
-    if recent_job is not None:
+    if recent_job is not None and not _is_resolved_auth_failure(recent_job, identity):
         return recent_job
 
     return _queue_new_report_job(request, assignment)
@@ -231,7 +244,7 @@ def assignment_report_page(request, assignment_id):
         if identity is None or identity.revoked_at is not None:
             return _redirect_to_github_login(request)
 
-        job = _get_or_queue_report_job(request, assignment)
+        job = _get_or_queue_report_job(request, assignment, identity)
 
         if job.status == "failed" and report is not None:
             messages.error(

@@ -3,10 +3,11 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone as django_timezone
 
 from accounts.models import GitHubIdentity
 
-from .models import Assignment, Course, Report, Student, StudentRepository
+from .models import Assignment, Course, Report, ReportJob, Student, StudentRepository
 
 
 class AssignmentDashboardTests(TestCase):
@@ -270,3 +271,36 @@ class AssignmentDashboardTests(TestCase):
             "Report refresh failed: Could not start background thread.",
         )
         self.assertNotContains(response, "refreshed recently")
+
+    @patch("assignments.web_views.queue_report_job")
+    def test_report_page_retries_after_reauth_instead_of_replaying_stale_auth_failure(
+        self, delay_mock
+    ):
+        assignment = Assignment.objects.first()
+        assignment.status = "active"
+        assignment.save(update_fields=["status"])
+        identity = GitHubIdentity.objects.create(
+            user=self.user,
+            github_id=789,
+            github_username="teacher",
+            encrypted_token="github-token",
+        )
+        failed_job = ReportJob.objects.create(
+            assignment=assignment,
+            requested_by=self.user,
+            status="failed",
+            error_message="Your GitHub sign-in is no longer valid. Please sign in again.",
+            completed_at=django_timezone.now(),
+        )
+        # Re-authenticating refreshes the identity's updated_at to after the
+        # failure, which is the signal that the old error is now stale.
+        identity.save(update_fields=["updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(f"/assignments/{assignment.id}/report/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Generating Hello World")
+        delay_mock.assert_called_once()
+        new_job = ReportJob.objects.exclude(id=failed_job.id).get()
+        delay_mock.assert_called_once_with(new_job.id)
