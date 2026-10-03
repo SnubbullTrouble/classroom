@@ -52,7 +52,10 @@
             status.textContent = job.status === "running" ? `Collected ${completed} of ${total} repositories` : `${job.status}...`;
             if (job.status === "completed") {
                 window.clearTimeout(stuckTimer);
-                window.location.reload();
+                // Not location.reload(): this page can be the direct response to
+                // the "Refresh report" POST, and reload() resubmits that POST
+                // rather than fetching the finished report with a plain GET.
+                window.location.href = window.location.pathname;
                 return;
             }
             if (job.status === "failed") {
